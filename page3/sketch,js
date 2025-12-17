@@ -1,0 +1,65 @@
+let flowers = [];
+let maxFlowers = 80;
+
+let poem = "산에는 꽃 피네";
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textAlign(CENTER, CENTER);
+  textFont("serif");
+}
+
+function draw() {
+  background(17, 17, 17, 40);
+
+  // 기본 문장
+  if (flowers.length === 0) {
+    fill(220);
+    textSize(32);
+    text(poem, width / 2, height / 2);
+  }
+
+  // 꽃 그리기
+  for (let i = flowers.length - 1; i >= 0; i--) {
+    flowers[i].update();
+    flowers[i].display();
+  }
+
+  // 화면 가득 차면 초기화
+  if (flowers.length > maxFlowers) {
+    flowers = [];
+  }
+}
+
+function mousePressed() {
+  flowers.push(new Flower(mouseX, mouseY));
+}
+
+// --------- Flower 클래스 ---------
+
+class Flower {
+  constructor(x, y) {
+    this.x = x + random(-30, 30);
+    this.y = y + random(-30, 30);
+    this.size = random(18, 40);
+    this.alpha = 0;
+    this.rotation = random(-PI / 8, PI / 8);
+  }
+
+  update() {
+    if (this.alpha < 200) {
+      this.alpha += 4;
+    }
+  }
+
+  display() {
+    push();
+    translate(this.x, this.y);
+    rotate(this.rotation);
+    fill(255, this.alpha);
+    noStroke();
+    textSize(this.size);
+    text("꽃", 0, 0);
+    pop();
+  }
+}

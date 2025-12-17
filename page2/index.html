@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>C335143_오우가</title>
+    <style>
+      @font-face {
+        font-family: "Shilla";
+        src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2206-02@1.0/Shilla_CultureB-Bold.woff2")
+          format("woff2");
+      }
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: #fdfdfd;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      canvas {
+        display: block;
+      }
+      #guide {
+        position: absolute;
+        top: 20px;
+        width: 100%;
+        text-align: center;
+        font-family: "Shilla", serif;
+        color: #555;
+        font-size: 0.9rem;
+        pointer-events: none;
+        opacity: 0.6;
+        letter-spacing: 1px;
+        z-index: 10;
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="guide">
+      드래그(물) · 더블탭(돌) · 위로 쓸기(소나무) · 꾹 누르기(대나무) ·
+      휠/핀치(달)
+    </div>
+    <canvas id="stage"></canvas>
+    <script>
+      window.addEventListener("load", () => {
+        const canvas = document.getElementById("stage");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+
+        const CONFIG = {
+          fontSize: 22,
+          lineHeight: 36,
+          friction: 0.92,
+          ease: 0.08,
+          returnSpeed: 0.008,
+          longPressTime: 400,
+        };
+
+        // 좌우 단 위치 변수
+        let colLeftRatio = 0.35;
+        let colRightRatio = 0.65;
+
+        const TEXT_DATA = [
+          "오우가",
+          "윤선도",
+          "",
+          "내 벗이 몇인가 하니 수석과 송죽이라",
+          "동산에 달 오르니 그 더욱 반갑고야",
+          "두어라 이 다섯 밖에 또 더하여 무엇하리",
+          "",
+          "구름 빛이 좋다 하나 검기를 자주 한다",
+          "바람 소리 맑다 하나 그칠 적이 하노라",
+          "좋고도 그칠 뉘 없기는 물뿐인가 하노라",
+          "",
+          "꽃은 무슨 일로 피면서 쉬이 지고",
+          "풀은 어이하여 푸르 듯 누르나니",
+          "아마도 변치 아님은 바위뿐인가 하노라",
+          "SPLIT_HERE",
+          "",
+          "더우면 꽃 피고 추우면 잎 지거늘",
+          "솔아 너는 어찌 눈 서리를 모르느냐",
+          "구천에 뿌리 곧은 줄을 글로 하여 아노라",
+          "",
+          "나무도 아닌 것이 풀도 아닌 것이",
+          "곧기는 뉘 시키며 속은 어이 비었느냐",
+          "저렇게 사시에 푸르니 그를 좋아하노라",
+          "",
+          "작은 것이 높이 떠서 만물을 다 비추니",
+          "밤중의 광명이 너만 하니 또 있느냐",
+          "보고도 말 아니 하니 내 벗인가 하노라",
+        ];
+
+        const PINE_BRANCHES = [
+          { t: 0.25, dir: -1, len: 170, curve: 35 },
+          { t: 0.4, dir: 1, len: 150, curve: 30 },
+          { t: 0.55, dir: -1, len: 130, curve: 25 },
+          { t: 0.68, dir: 1, len: 110, curve: 20 },
+          { t: 0.8, dir: -1, len: 90, curve: 15 },
+          { t: 0.9, dir: 1, len: 70, curve: 10 },
+        ];
+
+        const State = {
+          water: 0,
+          stone: 0,
+          pine: 0,
+          bamboo: 0,
+          moon: 0,
+          target: { water: 0, stone: 0, pine: 0, bamboo: 0, moon: 0 },
+          isHoldingBamboo: false,
+          update() {
+            if (this.isHoldingBamboo) this.target.bamboo = 1.0;
+            for (let key in this.target) {
+              this[key] += (this.target[key] - this[key]) * CONFIG.ease;
+              if (!(key === "bamboo" && this.isHoldingBamboo)) {
+                if (this.target[key] > 0)
+                  this.target[key] -= CONFIG.returnSpeed;
+              }
+              if (this[key] < 0.001) this[key] = 0;
+            }
+          },
+        };
+
+        class CharParticle {
+          constructor(char, x, y, row, col, totalParticles, globalIndex) {
+            this.char = char;
+            this.originX = x;
+            this.originY = y;
+            this.row = row;
+            this.col = col;
+            this.x = x;
+            this.y = y;
+            this.vx = 0;
+            this.vy = 0;
+            this.scaleX = 1;
+            this.scaleY = 1;
+            this.alpha = 1;
+            this.rotation = 0;
+            this.index = globalIndex;
+            this.total = totalParticles;
+            this.rand1 = Math.random();
+            this.rand2 = Math.random();
+
+            const roleRandom = Math.random();
+            if (roleRandom < 0.15) {
+              this.pineRole = "trunk";
+              this.posInRole = this.rand2;
+            } else if (roleRandom < 0.35) {
+              this.pineRole = "branch";
+              this.branchIdx = Math.floor(this.rand1 * PINE_BRANCHES.length);
+              this.posInRole = this.rand2;
+            } else {
+              this.pineRole = "needle";
+              this.branchIdx = Math.floor(this.rand1 * PINE_BRANCHES.length);
+              this.posInRole = this.rand2;
+            }
+          }
+
+          update(time) {
+            let tx = this.originX,
+              ty = this.originY,
+              tScaleX = 1,
+              tScaleY = 1,
+              tAlpha = 1,
+              tRot = 0;
+            const cw = canvas.width,
+              ch = canvas.height,
+              cx = cw / 2,
+              cy = ch / 2;
+
+            if (State.water > 0.01) {
+              const layer = this.index % 4;
+              const speed = 1.5 + layer * 0.5 + this.rand1 * 0.5;
+              const flowDistance = time * 0.08 * speed;
+              let flowX = ((this.originX + flowDistance) % (cw + 100)) - 50;
+              const waveFreq1 = 0.006;
+              const waveFreq2 = 0.015;
+              const waveAmp = 25 + layer * 10;
+              const wave1 = Math.sin(flowX * waveFreq1 + time * 0.002);
+              const wave2 = Math.cos(flowX * waveFreq2 - time * 0.003);
+              const totalWave = (wave1 + wave2 * 0.5) * waveAmp;
+              const waterBaseY = ch * 0.65 + layer * 15;
+              tx = this.originX * (1 - State.water) + flowX * State.water;
+              ty =
+                this.originY * (1 - State.water) +
+                (waterBaseY + totalWave) * State.water;
+              tAlpha =
+                0.4 + Math.abs(Math.sin(time * 0.005 + this.index)) * 0.6;
+              tScaleX = 1.0 + Math.sin(time * 0.01) * 0.2;
+              tRot = Math.sin(time * 0.003 + this.index) * 0.1;
+            }
+
+            if (State.stone > 0.01) {
+              const rBase = 120,
+                distFactor = Math.pow(this.rand1, 0.6) * rBase,
+                angle = this.rand2 * Math.PI * 2;
+              const noise = Math.cos(angle * 3) * 20;
+              let roughX = Math.cos(angle) * (distFactor + noise) * 1.3,
+                roughY = Math.sin(angle) * (distFactor + noise) * 0.9;
+              if (roughY < 0) roughY *= 0.8;
+              tx =
+                this.originX * (1 - State.stone) + (cx + roughX) * State.stone;
+              ty =
+                this.originY * (1 - State.stone) +
+                (ch * 0.82 + roughY) * State.stone;
+              tScaleX = tScaleY = 1.0 - State.stone * 0.1;
+            }
+
+            if (State.pine > 0.01) {
+              const treeX = cw * 0.5;
+              const treeY = ch + 20;
+              const h = ch * 0.7;
+              const getTrunkPos = (t) => {
+                return {
+                  x: treeX + Math.sin(t * Math.PI * 0.8) * 50,
+                  y: treeY - t * h,
+                };
+              };
+              if (this.pineRole === "trunk") {
+                const t = this.posInRole;
+                const pos = getTrunkPos(t);
+                const width = (1 - t) * 45 + 10;
+                const xOffset = (this.rand1 - 0.5) * width;
+                tx =
+                  this.originX * (1 - State.pine) +
+                  (pos.x + xOffset) * State.pine;
+                ty = this.originY * (1 - State.pine) + pos.y * State.pine;
+                tScaleX = 1.3;
+                tScaleY = 1.2;
+              } else {
+                const bIdx = this.branchIdx % PINE_BRANCHES.length;
+                const bInfo = PINE_BRANCHES[bIdx];
+                const trunkPos = getTrunkPos(bInfo.t);
+                const tipX = trunkPos.x + bInfo.dir * bInfo.len;
+                const tipY = trunkPos.y + bInfo.curve;
+                if (this.pineRole === "branch") {
+                  const tOnBranch = this.posInRole;
+                  const midX = (trunkPos.x + tipX) / 2;
+                  const midY = (trunkPos.y + tipY) / 2 + 15;
+                  const oneT = 1 - tOnBranch;
+                  const bx =
+                    oneT * oneT * trunkPos.x +
+                    2 * oneT * tOnBranch * midX +
+                    tOnBranch * tOnBranch * tipX;
+                  const by =
+                    oneT * oneT * trunkPos.y +
+                    2 * oneT * tOnBranch * midY +
+                    tOnBranch * tOnBranch * tipY;
+                  const thickness = (1 - tOnBranch) * 5;
+                  const jitterY = (this.rand1 - 0.5) * thickness;
+                  tx = this.originX * (1 - State.pine) + bx * State.pine;
+                  ty =
+                    this.originY * (1 - State.pine) +
+                    (by + jitterY) * State.pine;
+                  tRot = Math.atan2(tipY - trunkPos.y, tipX - trunkPos.x);
+                  tScaleX = 0.9;
+                } else {
+                  const angle = this.rand1 * Math.PI * 2;
+                  const dist = Math.sqrt(this.posInRole) * 65;
+                  const nx = tipX + Math.cos(angle) * dist;
+                  const ny = tipY + Math.sin(angle) * (dist * 0.6);
+                  const wind = Math.sin(time * 0.002 + ny * 0.01) * 8;
+                  tx =
+                    this.originX * (1 - State.pine) + (nx + wind) * State.pine;
+                  ty =
+                    this.originY * (1 - State.pine) +
+                    (ny + wind * 0.2) * State.pine;
+                  tScaleX = 0.7;
+                  tScaleY = 0.7;
+                  tRot = this.rand1 - 0.5;
+                }
+              }
+            }
+
+            if (State.bamboo > 0.01) {
+              const numStalks = 6,
+                stalkID = this.col % numStalks;
+              const stalkX = (cw / (numStalks + 1)) * (stalkID + 1);
+              const safeHeight = ch - 120,
+                maxP = Math.floor(this.total / numStalks);
+              const idxInStalk = Math.floor(this.index / numStalks);
+              const stepY = Math.min(24, safeHeight / (maxP * 0.6));
+              const stalkY = ch - 60 - idxInStalk * stepY;
+              const sway =
+                Math.sin(time * 0.004 + stalkID) *
+                20 *
+                Math.pow((ch - stalkY) / ch, 2);
+              tx =
+                this.originX * (1 - State.bamboo) +
+                (stalkX + sway) * State.bamboo;
+              ty = this.originY * (1 - State.bamboo) + stalkY * State.bamboo;
+              if (idxInStalk % 8 === 0) {
+                tScaleX = 1.4;
+                tx += 2 * State.bamboo;
+              } else tScaleX = 0.6;
+              tScaleY = 1.1;
+            }
+
+            if (State.moon > 0.01) {
+              const r = Math.min(cw, ch) * 0.35,
+                angle =
+                  (this.index / this.total) * Math.PI * 10 + time * 0.0002;
+              tx =
+                this.originX * (1 - State.moon) +
+                (cx + Math.cos(angle) * r) * State.moon;
+              ty =
+                this.originY * (1 - State.moon) +
+                (cy + Math.sin(angle) * r) * State.moon;
+              tScaleX = tScaleY = 1 + State.moon * 0.5;
+            }
+
+            this.vx += (tx - this.x) * CONFIG.ease;
+            this.vy += (ty - this.y) * CONFIG.ease;
+            this.vx *= CONFIG.friction;
+            this.vy *= CONFIG.friction;
+            this.x += this.vx;
+            this.y += this.vy;
+            this.scaleX += (tScaleX - this.scaleX) * 0.1;
+            this.scaleY += (tScaleY - this.scaleY) * 0.1;
+            this.alpha += (tAlpha - this.alpha) * 0.1;
+            this.rotation += (tRot - this.rotation) * 0.1;
+          }
+
+          draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.scale(this.scaleX, this.scaleY);
+            let r = 30,
+              g = 30,
+              b = 30;
+
+            if (State.water > 0.1) {
+              const v = Math.sin(this.index);
+              r = 20 + v * 10;
+              g = 100 + v * 30;
+              b = 200 + v * 55;
+            }
+            if (State.stone > 0.1) {
+              r = 60;
+              g = 55;
+              b = 50;
+            }
+            if (State.pine > 0.1) {
+              if (this.pineRole === "trunk") {
+                r = 90;
+                g = 60;
+                b = 40;
+              } else if (this.pineRole === "branch") {
+                r = 130;
+                g = 80;
+                b = 50;
+              } else {
+                r = 30;
+                g = 80;
+                b = 50;
+              }
+            }
+            if (State.bamboo > 0.1) {
+              r = 50;
+              g = 120;
+              b = 40;
+            }
+            if (State.moon > 0.1) {
+              r = 240;
+              g = 220;
+              b = 100;
+              ctx.shadowBlur = 20 * State.moon;
+              ctx.shadowColor = "rgba(255, 220, 100, 0.6)";
+            }
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${this.alpha})`;
+            const isTitle = this.row < 2 && !this.isRightCol;
+            ctx.font = isTitle
+              ? `bold ${CONFIG.fontSize * 1.3}px 'Shilla'`
+              : `${CONFIG.fontSize}px 'Shilla'`;
+            ctx.fillText(this.char, 0, 0);
+            ctx.restore();
+          }
+        }
+
+        let particles = [];
+
+        function resize() {
+          canvas.width = document.body.clientWidth;
+          canvas.height = document.body.clientHeight;
+          if (canvas.width === 0) {
+            setTimeout(resize, 100);
+            return;
+          }
+
+          const w = canvas.width;
+          const h = canvas.height;
+
+          if (w >= 1400) {
+            CONFIG.fontSize = 22;
+            colLeftRatio = 0.35;
+            colRightRatio = 0.65;
+          } else if (w >= 1000) {
+            CONFIG.fontSize = 18;
+            colLeftRatio = 0.3;
+            colRightRatio = 0.7;
+          } else if (w >= 600) {
+            CONFIG.fontSize = 15;
+            colLeftRatio = 0.25;
+            colRightRatio = 0.75;
+          } else {
+            CONFIG.fontSize = Math.max(14, w * 0.05);
+            colLeftRatio = 0.35;
+            colRightRatio = 0.65;
+          }
+
+          CONFIG.lineHeight = CONFIG.fontSize * 1.7;
+          createParticles();
+        }
+
+        function createParticles() {
+          particles = [];
+          let isRightCol = false,
+            lIdx = 0,
+            rIdx = 0,
+            lTotal = 0,
+            rTotal = 0;
+
+          TEXT_DATA.forEach((l) => {
+            if (l === "SPLIT_HERE") {
+              isRightCol = true;
+              return;
+            }
+            if (isRightCol) rTotal++;
+            else lTotal++;
+          });
+
+          const lH = lTotal * CONFIG.lineHeight,
+            rH = rTotal * CONFIG.lineHeight,
+            startYL = (canvas.height - lH) / 2,
+            startYR = (canvas.height - rH) / 2;
+
+          isRightCol = false;
+          let gIdx = 0;
+
+          TEXT_DATA.forEach((line) => {
+            if (line === "SPLIT_HERE") {
+              isRightCol = true;
+              return;
+            }
+            const cFS =
+              gIdx < 10 && !isRightCol
+                ? CONFIG.fontSize * 1.3
+                : CONFIG.fontSize;
+            const lW = line.length * cFS;
+            let sX, sY, rNum;
+
+            if (!isRightCol) {
+              sX = canvas.width * colLeftRatio - lW / 2;
+              sY = startYL + lIdx * CONFIG.lineHeight;
+              rNum = lIdx++;
+            } else {
+              sX = canvas.width * colRightRatio - lW / 2;
+              sY = startYR + rIdx * CONFIG.lineHeight;
+              rNum = rIdx++;
+            }
+
+            line.split("").forEach((char, c) => {
+              if (char !== " ") {
+                const p = new CharParticle(
+                  char,
+                  sX + c * cFS,
+                  sY,
+                  rNum,
+                  c,
+                  0,
+                  gIdx++
+                );
+                p.isRightCol = isRightCol;
+                particles.push(p);
+              }
+            });
+          });
+          particles.forEach((p) => (p.total = particles.length));
+        }
+
+        let isDown = false,
+          startPos = { x: 0, y: 0 },
+          isDrag = false,
+          pressTimer,
+          tapCount = 0,
+          tapTimer,
+          initialPinchDist = 0;
+        function handleStart(x, y) {
+          isDown = true;
+          startPos = { x, y };
+          isDrag = false;
+          pressTimer = setTimeout(() => {
+            if (!isDrag && isDown) State.isHoldingBamboo = true;
+          }, CONFIG.longPressTime);
+        }
+        function handleMove(x, y) {
+          if (!isDown) return;
+          const dx = x - startPos.x,
+            dy = y - startPos.y,
+            dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 10) {
+            isDrag = true;
+            clearTimeout(pressTimer);
+            State.isHoldingBamboo = false;
+          }
+          if (Math.abs(dx) > Math.abs(dy) && dist > 30)
+            State.target.water = Math.min(dist / 200, 1.2);
+          if (dy < -40 && Math.abs(dy) > Math.abs(dx) * 1.5)
+            State.target.pine = Math.min(Math.abs(dy) / 250, 1.2);
+        }
+        function handleEnd() {
+          isDown = false;
+          initialPinchDist = 0;
+          clearTimeout(pressTimer);
+          State.isHoldingBamboo = false;
+          if (!isDrag) {
+            tapCount++;
+            clearTimeout(tapTimer);
+            tapTimer = setTimeout(() => {
+              if (tapCount >= 2) State.target.stone += 1.0;
+              tapCount = 0;
+            }, 250);
+          }
+        }
+        canvas.addEventListener("mousedown", (e) =>
+          handleStart(e.clientX, e.clientY)
+        );
+        window.addEventListener("mousemove", (e) =>
+          handleMove(e.clientX, e.clientY)
+        );
+        window.addEventListener("mouseup", handleEnd);
+        canvas.addEventListener("wheel", () => (State.target.moon += 0.05), {
+          passive: false,
+        });
+        canvas.addEventListener(
+          "touchstart",
+          (e) => {
+            if (e.touches.length === 2)
+              initialPinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+              );
+            else handleStart(e.touches[0].clientX, e.touches[0].clientY);
+          },
+          { passive: false }
+        );
+        window.addEventListener(
+          "touchmove",
+          (e) => {
+            if (e.touches.length === 2 && initialPinchDist > 0) {
+              const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+              );
+              if (Math.abs(dist - initialPinchDist) > 10) {
+                State.target.moon += 0.05;
+                initialPinchDist = dist;
+              }
+            } else handleMove(e.touches[0].clientX, e.touches[0].clientY);
+          },
+          { passive: false }
+        );
+        window.addEventListener("touchend", handleEnd);
+        function animate() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          State.update();
+          const time = Date.now();
+          particles.forEach((p) => {
+            p.update(time);
+            p.draw(ctx);
+          });
+          requestAnimationFrame(animate);
+        }
+        window.addEventListener("resize", resize);
+        setTimeout(() => {
+          resize();
+          animate();
+        }, 200);
+      });
+    </script>
+  </body>
+</html>
