@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>C335143_문래원_TextRain_Final_PadSafe</title>
+    <title>C335143_문래원_TextRain_Final</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -45,23 +45,19 @@
         left: 0;
         width: 100%;
         height: 100%;
-        /* 넘치는 부분 잘라내기 */
         overflow: hidden; 
       }
 
-      /* [수정 1] iframe 강제 축소 (80% 줌 효과) */
       #sketch-iframe {
         border: none;
         display: block;
         background: transparent;
         transition: opacity 0.5s ease;
 
-        /* 너비/높이를 125%로 설정하고 */
         width: 125%;
         height: 125%;
-        /* 크기를 0.8배(80%)로 줄임 -> 결과적으로 100% 영역에 딱 맞게 들어감 */
         transform: scale(0.8);
-        transform-origin: 0 0; /* 왼쪽 위 기준 축소 */
+        transform-origin: 0 0;
       }
 
       #ipad-touch-shield {
@@ -342,15 +338,11 @@
       let isDragging = false;
       let touchStartTime = 0;
 
-      // [수정 2] 좌표 보정 함수
-      // iframe이 0.8배로 축소되었으므로, 터치 좌표는 반대로 1.25배(1/0.8) 튀겨줘야
-      // 내부 캔버스의 정확한 위치를 찍을 수 있음.
       function sendEvent(type, x, y) {
         const iWin = iframe.contentWindow;
         if(!iWin) return;
         const iDoc = iframe.contentDocument || iWin.document;
         
-        // 보정된 좌표
         const scaledX = x * 1.25;
         const scaledY = y * 1.25;
 
@@ -409,3 +401,4 @@
     }, false);
   </script>
 </html>
+
