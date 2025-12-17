@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>C335143_흔들리며 피는 꽃</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <style>
+      @font-face {
+        font-family: "Shilla";
+        src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2206-02@1.0/Shilla_CultureB-Bold.woff2")
+          format("woff2");
+        font-weight: 700;
+        font-display: swap;
+      }
+
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: #fcfbf5;
+        background-image: radial-gradient(
+          circle at center,
+          #f9f6e8 0%,
+          #fbf7ea 100%
+        );
+        font-family: "Shilla", serif;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+      }
+
+      #ink-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+      }
+
+      #ink-canvas:active {
+        cursor: grabbing;
+      }
+
+      #hanji-texture-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+        pointer-events: none;
+        opacity: 0.6;
+        background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0sAAAAAXNSR0IArs4c6QAAABJJREFUGFdjYPj/P3f+fwYDZAAQfQB8e4i/AAAAAElFTkSuQmCC");
+        background-size: 2px 2px;
+        filter: contrast(120%) brightness(110%);
+        mix-blend-mode: multiply;
+      }
+
+      #poem-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      .char-box {
+        position: absolute;
+        font-size: 32px;
+        color: #1a1a1a;
+        pointer-events: none;
+        white-space: nowrap;
+        will-change: transform;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+        user-select: none;
+        -webkit-user-select: none;
+        transition: color 0.1s, text-shadow 0.1s;
+        opacity: 0.9;
+      }
+
+      .char-box.dragging {
+        color: #cd2e3a !important;
+        text-shadow: 2px 8px 20px rgba(60, 20, 20, 0.4);
+        z-index: 1000;
+        font-weight: 900;
+      }
+
+      #guide {
+        position: absolute;
+        top: 30px;
+        width: 100%;
+        text-align: center;
+        color: #888;
+        font-size: 16px;
+        z-index: 5;
+        pointer-events: none;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="guide">글자를 던지거나, 빈 곳을 3초간 꾹 눌러보세요.</div>
+    <canvas id="ink-canvas"></canvas>
+    <div id="hanji-texture-overlay"></div>
+    <div id="poem-container"></div>
+
+    <script src="sketch.js"></script>
+  </body>
+</html>
