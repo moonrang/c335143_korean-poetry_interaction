@@ -29,7 +29,6 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
-        /* 오버스크롤/바운스 효과 제거 */
         overscroll-behavior: none;
         touch-action: none;
         background-color: #f4f1ea;
@@ -46,18 +45,25 @@
         left: 0;
         width: 100%;
         height: 100%;
+        /* 넘치는 부분 잘라내기 */
+        overflow: hidden; 
       }
 
+      /* [수정 1] iframe 강제 축소 (80% 줌 효과) */
       #sketch-iframe {
-        width: 100%;
-        height: 100%;
         border: none;
         display: block;
         background: transparent;
         transition: opacity 0.5s ease;
+
+        /* 너비/높이를 125%로 설정하고 */
+        width: 125%;
+        height: 125%;
+        /* 크기를 0.8배(80%)로 줄임 -> 결과적으로 100% 영역에 딱 맞게 들어감 */
+        transform: scale(0.8);
+        transform-origin: 0 0; /* 왼쪽 위 기준 축소 */
       }
 
-      /* 터치 쉴드 (호버 에뮬레이터) */
       #ipad-touch-shield {
         display: none;
       }
@@ -261,7 +267,7 @@
       function loadSketch(index) {
         if (index < 0 || index >= sketches.length) return;
         currentIndex = index;
-
+        
         iframe.style.opacity = 0;
         setTimeout(() => {
           iframe.src = sketches[index];
@@ -269,18 +275,16 @@
             iframe.style.opacity = 1;
           };
         }, 150);
-
+        
         updateSeals();
 
-        // 쉴드 ON/OFF 로직
         const shield = document.getElementById("ipad-touch-shield");
         if (shield) {
-          // 3, 4페이지(index 2,3)만 호버 쉴드 켜기
-          if (index >= 2) {
-            shield.style.display = "block";
-          } else {
-            shield.style.display = "none";
-          }
+            if (index >= 2) {
+                shield.style.display = "block";
+            } else {
+                shield.style.display = "none";
+            }
         }
       }
 
@@ -327,121 +331,81 @@
         left: "0",
         width: "100%",
         height: "100%",
-        zIndex: "50",
+        zIndex: "50", 
         touchAction: "none",
         background: "transparent",
-        display: "none",
+        display: "none"
       });
       iframe.parentElement.appendChild(shield);
 
-      let startX = 0,
-        startY = 0;
+      let startX = 0, startY = 0;
       let isDragging = false;
       let touchStartTime = 0;
 
+      // [수정 2] 좌표 보정 함수
+      // iframe이 0.8배로 축소되었으므로, 터치 좌표는 반대로 1.25배(1/0.8) 튀겨줘야
+      // 내부 캔버스의 정확한 위치를 찍을 수 있음.
       function sendEvent(type, x, y) {
         const iWin = iframe.contentWindow;
-        if (!iWin) return;
+        if(!iWin) return;
         const iDoc = iframe.contentDocument || iWin.document;
-        const target = iDoc.elementFromPoint(x, y) || iDoc.body;
+        
+        // 보정된 좌표
+        const scaledX = x * 1.25;
+        const scaledY = y * 1.25;
+
+        const target = iDoc.elementFromPoint(scaledX, scaledY) || iDoc.body;
+        
         if (type === "click") {
           ["mousedown", "mouseup", "click"].forEach((t) => {
-            target.dispatchEvent(
-              new MouseEvent(t, {
-                bubbles: true,
-                cancelable: true,
-                view: iWin,
-                clientX: x,
-                clientY: y,
-                buttons: 1,
-              })
-            );
+            target.dispatchEvent(new MouseEvent(t, {
+                bubbles: true, cancelable: true, view: iWin,
+                clientX: scaledX, clientY: scaledY, buttons: 1,
+            }));
           });
         } else {
-          target.dispatchEvent(
-            new MouseEvent("mousemove", {
-              bubbles: true,
-              cancelable: true,
-              view: iWin,
-              clientX: x,
-              clientY: y,
-              buttons: 0,
-            })
-          );
+          target.dispatchEvent(new MouseEvent("mousemove", {
+              bubbles: true, cancelable: true, view: iWin,
+              clientX: scaledX, clientY: scaledY, buttons: 0,
+            }));
         }
       }
 
-      shield.addEventListener(
-        "touchstart",
-        (e) => {
-          e.preventDefault();
-          const t = e.touches[0];
-          startX = t.clientX;
-          startY = t.clientY;
-          touchStartTime = Date.now();
-          isDragging = false;
-          sendEvent("mousemove", startX, startY);
-        },
-        { passive: false }
-      );
+      shield.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const t = e.touches[0];
+        startX = t.clientX; startY = t.clientY;
+        touchStartTime = Date.now();
+        isDragging = false;
+        sendEvent("mousemove", startX, startY);
+      }, { passive: false });
 
-      shield.addEventListener(
-        "touchmove",
-        (e) => {
-          e.preventDefault();
-          const t = e.touches[0];
-          const dist = Math.sqrt(
-            Math.pow(t.clientX - startX, 2) + Math.pow(t.clientY - startY, 2)
-          );
-          if (dist > 10) isDragging = true;
-          sendEvent("mousemove", t.clientX, t.clientY);
-        },
-        { passive: false }
-      );
+      shield.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        const t = e.touches[0];
+        const dist = Math.sqrt(Math.pow(t.clientX - startX, 2) + Math.pow(t.clientY - startY, 2));
+        if (dist > 10) isDragging = true;
+        sendEvent("mousemove", t.clientX, t.clientY);
+      }, { passive: false });
 
-      shield.addEventListener(
-        "touchend",
-        (e) => {
-          e.preventDefault();
-          const t = e.changedTouches[0];
-          if (!isDragging && Date.now() - touchStartTime < 300) {
-            sendEvent("click", t.clientX, t.clientY);
-          }
-        },
-        { passive: false }
-      );
+      shield.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        if (!isDragging && Date.now() - touchStartTime < 300) {
+          sendEvent("click", t.clientX, t.clientY);
+        }
+      }, { passive: false });
     })();
   </script>
 
   <script>
-    // 1. iOS 사파리 핀치 줌 방지 (gesturestart 이벤트 무시)
-    document.addEventListener("gesturestart", function (e) {
-      e.preventDefault();
-    });
-
-    // 2. 멀티터치(두 손가락 이상) 이동 시 브라우저 기본 동작(줌 등) 차단
-    document.addEventListener(
-      "touchmove",
-      function (e) {
-        if (e.touches.length > 1) {
-          e.preventDefault();
-        }
-      },
-      { passive: false }
-    );
-
-    // 3. 더블 탭 줌 방지 (약간의 딜레이로 터치 이벤트 필터링)
+    document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+    document.addEventListener('touchmove', function(e) { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
     let lastTouchEnd = 0;
-    document.addEventListener(
-      "touchend",
-      function (e) {
-        const now = new Date().getTime();
-        if (now - lastTouchEnd <= 300) {
-          e.preventDefault();
-        }
-        lastTouchEnd = now;
-      },
-      false
-    );
+    document.addEventListener('touchend', function(e) {
+      const now = (new Date()).getTime();
+      if (now - lastTouchEnd <= 300) e.preventDefault();
+      lastTouchEnd = now;
+    }, false);
   </script>
 </html>
